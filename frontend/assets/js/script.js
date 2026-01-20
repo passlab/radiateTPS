@@ -254,22 +254,70 @@ export function toggleCreatePatientForm() {
     const birthDate = document.getElementById("patient-dob").value;
     const sex = document.getElementById("patient-sex").value;
 
+    // Validation
+    if (!id) {
+        alert("Error: Patient ID is required.");
+        return;
+    }
+    if (!first || !last) {
+        alert("Error: First name and last name are required.");
+        return;
+    }
+
     const name = `${first} ${middle} ${last}`.replace(/\s+/g, ' ').trim();
 
     const payload = { id, name, birthDate, sex };
 
-    const response = await fetch("/patients/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-    });
+    try {
+        const response = await fetch("/patients/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
 
-    if (response.ok) {
-        alert("Patient created successfully!");
-        loadPatients(); // reload patient list if visible
-        document.getElementById("patient-form").reset();
-    } else {
-        alert("Error creating patient.");
+        // Check if response has content
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            const text = await response.text();
+            console.error("Non-JSON response:", text);
+            alert(`Error: Server returned non-JSON response. Status: ${response.status}`);
+            return;
+        }
+
+        // Check if response body is empty
+        const text = await response.text();
+        if (!text || text.trim() === "") {
+            console.error("Empty response from server");
+            alert(`Error: Empty response from server. Status: ${response.status}`);
+            return;
+        }
+
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (parseError) {
+            console.error("JSON parse error:", parseError, "Response text:", text);
+            alert(`Error: Invalid JSON response from server. Status: ${response.status}`);
+            return;
+        }
+
+        if (response.ok) {
+            alert("Patient created successfully!");
+            loadPatients(); // reload patient list if visible
+            // Reset form
+            document.getElementById("patient-id").value = "";
+            document.getElementById("patient-first-name").value = "";
+            document.getElementById("patient-middle-name").value = "";
+            document.getElementById("patient-last-name").value = "";
+            document.getElementById("patient-dob").value = "";
+            document.getElementById("patient-sex").value = "";
+        } else {
+            const errorMsg = data.error || data.message || `Error creating patient. Status: ${response.status}`;
+            alert(`Error: ${errorMsg}`);
+        }
+    } catch (error) {
+        console.error("Error creating patient:", error);
+        alert(`Error: Failed to create patient. ${error.message}`);
     }
 }
 

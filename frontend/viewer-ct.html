@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CT Viewer - RadiateTPS</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .viewer-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 60px);
+            padding: 20px;
+        }
+        .viewer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .viewer-main {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+        }
+        .viewer-image {
+            flex: 1;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .viewer-controls {
+            width: 300px;
+            background: #293556;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .control-group {
+            margin-bottom: 20px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+        .control-group input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            background: #1a1e24;
+            color: white;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        .btn-primary {
+            background: #5983FC;
+            color: white;
+        }
+        .btn-secondary {
+            background: #555;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.8;
+        }
+        .toggle-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .toggle-btn {
+            flex: 1;
+            padding: 8px;
+            background: #1a1e24;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .toggle-btn.active {
+            background: #5983FC;
+            border-color: #5983FC;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">RadiateTPS</div>
+        <div class="nav-links">
+            <a href="index.html">Home</a>
+            <a href="dashboard.html">Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="viewer-container">
+        <div class="viewer-header">
+            <h2 id="viewer-title">CT Viewer</h2>
+            <div>
+                <button class="btn btn-secondary" onclick="window.history.back()">← Back</button>
+                <button class="btn btn-primary" onclick="createPlan()">Create Plan from this CT</button>
+            </div>
+        </div>
+
+        <div class="viewer-main">
+            <div class="viewer-image">
+                <div id="ct-viewer" style="width: 100%; height: 100%; min-height: 600px;"></div>
+            </div>
+
+            <div class="viewer-controls">
+                <div class="control-group">
+                    <label>Slice Navigator</label>
+                    <input type="range" id="slice-slider" min="0" max="100" value="50" oninput="updateSlice(this.value)">
+                    <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                        <span>Slice: <span id="slice-number">50</span></span>
+                        <span>Total: <span id="total-slices">100</span></span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Window/Level</label>
+                    <label style="font-size: 12px;">Window: <input type="number" id="window-value" value="400" onchange="updateWindowLevel()" style="width: 80px; display: inline;"></label>
+                    <label style="font-size: 12px;">Level: <input type="number" id="level-value" value="50" onchange="updateWindowLevel()" style="width: 80px; display: inline;"></label>
+                    <button class="btn btn-secondary" onclick="resetWindowLevel()" style="width: 100%; margin-top: 10px;">Reset</button>
+                </div>
+
+                <div class="control-group">
+                    <label>Overlays</label>
+                    <div class="toggle-group">
+                        <button class="toggle-btn active" id="toggle-roi" onclick="toggleROI()">ROI</button>
+                        <button class="toggle-btn" id="toggle-dose" onclick="toggleDose()">Dose</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>View</label>
+                    <div class="toggle-group">
+                        <button class="toggle-btn active" onclick="setView('axial')">Axial</button>
+                        <button class="toggle-btn" onclick="setView('coronal')">Coronal</button>
+                        <button class="toggle-btn" onclick="setView('sagittal')">Sagittal</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>CT Scan Info</label>
+                    <div id="ct-info" style="font-size: 12px; color: #aaa;">
+                        Loading...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Get CT ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const ctId = urlParams.get('id') || urlParams.get('ct_id');
+        const patientId = urlParams.get('patient_id');
+
+
+        let currentCTData = null;
+        let currentSlice = 50;
+        let showROI = true;
+        let showDose = false;
+        let currentView = 'axial';
+        let windowValue = 400;
+        let levelValue = 50;
+        let slicesWithROI = [];  // Track which slices have ROI data
+        let lastLoadedSlicePayload = null;
+        let hasLoadedCTScan = false;  // Track if we've successfully loaded a CT scan - NEVER show placeholder after this
+
+        // Load CT scan data
+        async function loadCTScan() {
+            try {
+                let url = '/ct';
+                if (ctId) {
+                    url += `?ct_scan_id=${ctId}`;
+                } else if (patientId) {
+                    url += `?patient_id=${patientId}`;
+                }
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    console.error('❌ API Error:', errorData);
+                    throw new Error(errorData.error || `HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+
+                if (data.ct_scans && data.ct_scans.length > 0) {
+                    const ctScan = data.ct_scans[0];
+                    currentCTData = ctScan;
+                    slicesWithROI = [];  // Reset ROI tracking for new CT scan
+                    console.log('🔄 Loaded new CT scan, resetting ROI slice tracking');
+                    
+                    document.getElementById('viewer-title').textContent = `CT Viewer: ${ctScan.name || 'CT Scan'}`;
+                    document.getElementById('ct-info').innerHTML = `
+                        <div>Patient: ${ctScan.patient_id}</div>
+                        <div>Slices: ${ctScan.slice_count || 'N/A'}</div>
+                        <div>Dataset: ${ctScan.dataset_name || 'N/A'}</div>
+                    `;
+                    
+                    if (ctScan.slice_count) {
+                        document.getElementById('slice-slider').max = ctScan.slice_count - 1;
+                        document.getElementById('total-slices').textContent = ctScan.slice_count;
+                        currentSlice = Math.min(currentSlice, ctScan.slice_count - 1);
+                        document.getElementById('slice-slider').value = currentSlice;
+                        document.getElementById('slice-number').textContent = currentSlice;
+                    }
+
+                    // Load CT image data
+                    await loadCTImage(ctScan);
+                } else {
+                    // Only show placeholder on initial load if no CT scans found
+                    if (!hasLoadedCTScan) {
+                        renderPlaceholder();
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading CT scan:', error);
+                // Only show placeholder on initial load
+                if (!hasLoadedCTScan) {
+                    renderPlaceholder();
+                }
+            }
+        }
+
+        // Load CT image slice
+        async function loadCTImage(ctScan) {
+            try {
+                if (!ctScan || !ctScan.id) {
+                    console.error('Invalid CT scan data');
+                    // NEVER show placeholder if we've already loaded a CT scan
+                    if (!hasLoadedCTScan) {
+                        renderPlaceholder();
+                    }
+                    return;
+                }
+
+                // Use real CT slice endpoint with view parameter
+                const sliceNum = currentSlice;
+                const response = await fetch(`/ct/${ctScan.id}/slice/${sliceNum}?view=${currentView}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Error loading CT slice:', errorData);
+                    // NEVER show placeholder if we've already loaded a CT scan
+                    if (!hasLoadedCTScan) {
+                        renderPlaceholder();
+                    } else {
+                        console.warn('⚠️ API error, keeping current CT scan view');
+                    }
+                    return;
+                }
+
+                const data = await response.json();
+                
+                // Always render CT scan if we have ct_slice data
+                if (data.ct_slice && Array.isArray(data.ct_slice) && data.ct_slice.length > 0) {
+                    // Update slice count based on current view
+                    if (data.total_slices) {
+                        const maxSlice = data.total_slices - 1;
+                        document.getElementById('slice-slider').max = maxSlice;
+                        document.getElementById('total-slices').textContent = data.total_slices;
+                        
+                        // Adjust current slice if it's out of range for this view
+                        if (currentSlice > maxSlice) {
+                            currentSlice = maxSlice;
+                            document.getElementById('slice-slider').value = currentSlice;
+                            document.getElementById('slice-number').textContent = currentSlice;
+                        }
+                    }
+                    
+                    // Update view info if provided
+                    if (data.view) {
+                        currentView = data.view;
+                    }
+                    
+                    // Render with real CT data - ALWAYS render the CT scan
+                    const viewName = currentView.charAt(0).toUpperCase() + currentView.slice(1);
+                    console.log(`✅ About to render CT scan: ${viewName} view, slice ${currentSlice}`);
+                    console.log(`📐 CT slice dimensions: ${data.ct_slice.length} rows x ${data.ct_slice[0]?.length || 'unknown'} cols`);
+                    console.log(`📦 Full data keys:`, Object.keys(data));
+                    
+                    // Debug dose data
+                    if (data.dose_slice) {
+                        console.log(`☢️  Dose data received:`, {
+                            isArray: Array.isArray(data.dose_slice),
+                            length: data.dose_slice.length,
+                            firstRowLength: data.dose_slice[0]?.length,
+                            sampleValues: data.dose_slice[0]?.slice(0, 5),
+                            hasNonZero: data.dose_slice.some(row => row && row.some(val => val > 0))
+                        });
+                    } else {
+                        console.log(`⚠️  No dose_slice in API response - dose data not available in dataset`);
+                    }
+                    
+                    // Store payload for window/level adjustments (preserve dose data)
+                    lastLoadedSlicePayload = {
+                        ct_slice: data.ct_slice,
+                        mask_slice: data.mask_slice || null,
+                        dose_slice: data.dose_slice || null
+                    };
+                    
+                    // Mark that we've successfully loaded a CT scan
+                    hasLoadedCTScan = true;
+                    renderCTView(data.ct_slice, data.mask_slice || null, data.dose_slice || null);
+                } else {
+                    console.error('❌ No valid CT slice data received:', data);
+                    // NEVER show placeholder if we've already loaded a CT scan
+                    if (!hasLoadedCTScan) {
+                        renderPlaceholder();
+                    } else {
+                        console.warn('⚠️ No valid data, keeping current CT scan view');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading CT image:', error);
+                // NEVER show placeholder if we've already loaded a CT scan
+                if (!hasLoadedCTScan) {
+                    renderPlaceholder();
+                } else {
+                    console.warn('⚠️ Error loading CT image, keeping current view');
+                }
+            }
+        }
+
+        // Fallback: Load sample data from tutorial endpoint
+        async function loadSampleData() {
+            try {
+                const response = await fetch('/plotly/compute_dose');
+                const data = await response.json();
+                if (data.ct_slice) {
+                    hasLoadedCTScan = true;  // Mark as loaded
+                    lastLoadedSlicePayload = {
+                        ct_slice: data.ct_slice,
+                        mask_slice: data.mask_slice
+                    };
+                    renderCTView(data.ct_slice, data.mask_slice, null);
+                } else {
+                    // Only show placeholder if we've never loaded a CT scan
+                    if (!hasLoadedCTScan) {
+                        renderPlaceholder();
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading sample data:', error);
+                // Only show placeholder if we've never loaded a CT scan
+                if (!hasLoadedCTScan) {
+                    renderPlaceholder();
+                }
+            }
+        }
+
+        // Render CT view with Plotly
+        function renderCTView(ctSlice, maskSlice, doseSlice) {
+            console.log('🎨 renderCTView called with:', {
+                hasCTSlice: !!ctSlice,
+                ctSliceType: typeof ctSlice,
+                isArray: Array.isArray(ctSlice),
+                ctSliceLength: ctSlice ? ctSlice.length : 0,
+                hasMaskSlice: !!maskSlice,
+                hasDoseSlice: !!doseSlice
+            });
+            
+            // CRITICAL: Always validate CT slice data
+            if (!ctSlice || !Array.isArray(ctSlice) || ctSlice.length === 0) {
+                console.error('❌ Invalid CT slice data in renderCTView:', ctSlice);
+                // NEVER show placeholder if we've already loaded a CT scan
+                if (!hasLoadedCTScan) {
+                    console.log('⚠️ Showing placeholder - no CT data and never loaded before');
+                    renderPlaceholder();
+                } else {
+                    console.warn('⚠️ Invalid CT data but keeping current view - CT scan already loaded');
+                }
+                return;
+            }
+            
+            // Validate that ctSlice has valid rows
+            if (!ctSlice[0] || !Array.isArray(ctSlice[0]) || ctSlice[0].length === 0) {
+                console.error('❌ CT slice has invalid row structure:', ctSlice[0]);
+                // NEVER show placeholder if we've already loaded a CT scan
+                if (!hasLoadedCTScan) {
+                    renderPlaceholder();
+                } else {
+                    console.warn('⚠️ Invalid row structure but keeping current view - CT scan already loaded');
+                }
+                return;
+            }
+            
+            console.log(`✅ Valid CT data: ${ctSlice.length} rows x ${ctSlice[0].length} cols`);
+            
+            // Capitalize first letter of view name
+            const viewName = currentView.charAt(0).toUpperCase() + currentView.slice(1);
+            
+            const layout = {
+                title: `${viewName} View - Slice ${currentSlice}`,
+                xaxis: { title: 'X (mm)', showgrid: false },
+                yaxis: { 
+                    title: 'Y (mm)', 
+                    showgrid: false,
+                    scaleanchor: 'x',
+                    scaleratio: 1,
+                    autorange: 'reversed'
+                },
+                showlegend: false,
+                plot_bgcolor: '#1a1e24',
+                paper_bgcolor: '#1a1e24',
+                font: { color: 'white' }
+            };
+
+            const traces = [];
+
+            // CT base layer
+            console.log('📊 Creating CT heatmap trace...');
+            const effectiveWindow = Math.max(windowValue, 1);
+            const effectiveLevel = levelValue;
+            const zmin = effectiveLevel - effectiveWindow / 2;
+            const zmax = effectiveLevel + effectiveWindow / 2;
+            traces.push({
+                z: ctSlice,
+                type: 'heatmap',
+                colorscale: 'Greys',
+                showscale: false,
+                opacity: 1.0,
+                zmin: zmin,
+                zmax: zmax
+            });
+
+            // ROI overlay - Use contour lines to show ROI boundaries
+            // Plotly doesn't support transparent heatmap overlays, so we use contour lines
+            if (showROI && maskSlice) {
+                // Check if mask has actual data (not all zeros)
+                const hasData = maskSlice.some(row => row.some(val => val > 0));
+                
+                console.log('🔍 ROI Check:', {
+                    showROI: showROI,
+                    hasMaskSlice: !!maskSlice,
+                    hasData: hasData,
+                    maskDimensions: maskSlice ? `${maskSlice.length}x${maskSlice[0]?.length || 0}` : 'N/A',
+                    ctDimensions: `${ctSlice.length}x${ctSlice[0]?.length || 0}`,
+                    nonZeroCount: maskSlice ? maskSlice.flat().filter(v => v > 0).length : 0,
+                    sampleMaskValues: maskSlice ? [
+                        maskSlice[Math.floor(maskSlice.length/2)][Math.floor(maskSlice[0].length/2)],
+                        maskSlice[0][0],
+                        maskSlice[maskSlice.length-1][maskSlice[0].length-1]
+                    ] : []
+                });
+                
+                if (hasData) {
+                    // Track this slice as having ROI data
+                    if (!slicesWithROI.includes(currentSlice)) {
+                        slicesWithROI.push(currentSlice);
+                        slicesWithROI.sort((a, b) => a - b);  // Keep sorted
+                        console.log(`📍 Slice ${currentSlice} has ROI data. Total slices with ROI: ${slicesWithROI.length}`);
+                        console.log(`📋 Slices with ROI: [${slicesWithROI.join(', ')}]`);
+                    }
+                    
+                    // Add contour lines to show ROI boundary in bright red
+                    // Using 'lines' coloring for reliable visibility
+                    traces.push({
+                        z: maskSlice,
+                        type: 'contour',
+                        showscale: false,
+                        contours: {
+                            coloring: 'lines',  // Just lines for reliability
+                            showlines: true,
+                            showlabels: false,
+                            start: 0.5,
+                            end: 1,
+                            size: 0.5
+                        },
+                        line: { 
+                            color: '#FF0000',  // Bright red
+                            width: 3,          // Thicker for visibility
+                            smoothing: 1.3
+                        },
+                        hoverinfo: 'skip',
+                        xaxis: 'x',
+                        yaxis: 'y',
+                        zmin: 0,
+                        zmax: 1
+                    });
+                    
+                    console.log(`✅ ROI contour lines added for slice ${currentSlice}`);
+                } else {
+                    // Remove from tracking if it was previously tracked
+                    const index = slicesWithROI.indexOf(currentSlice);
+                    if (index > -1) {
+                        slicesWithROI.splice(index, 1);
+                    }
+                }
+            } else {
+                if (showROI && !maskSlice) {
+                    console.log('ℹ️ ROI toggle is ON but no mask data available');
+                }
+            }
+
+            // Dose overlay - semi-transparent heatmap showing dose distribution
+            console.log(`🔍 Dose overlay check: showDose=${showDose}, hasDoseSlice=${!!doseSlice}, isArray=${Array.isArray(doseSlice)}, length=${doseSlice?.length || 0}`);
+            
+            if (showDose && doseSlice && Array.isArray(doseSlice) && doseSlice.length > 0) {
+                // Validate dose slice structure
+                if (doseSlice[0] && Array.isArray(doseSlice[0])) {
+                    // Check if dose has actual data (not all zeros)
+                    const hasDoseData = doseSlice.some(row => row && row.some(val => val > 0));
+                    
+                    console.log(`🔍 Dose data validation: hasDoseData=${hasDoseData}, firstRowLength=${doseSlice[0]?.length}`);
+                    
+                    if (hasDoseData) {
+                        // Add dose overlay as semi-transparent heatmap
+                        traces.push({
+                            z: doseSlice,
+                            type: 'heatmap',
+                            colorscale: 'Jet',  // Blue (low) to Red (high) colormap
+                            showscale: true,  // Show colorbar for dose values
+                            opacity: 0.5,  // Semi-transparent so CT scan is visible
+                            colorbar: {
+                                title: 'Dose (Gy)',
+                                titlefont: { color: 'white' },
+                                tickfont: { color: 'white' }
+                            },
+                            hoverinfo: 'skip',
+                            xaxis: 'x',
+                            yaxis: 'y',
+                            zmin: 0  // Dose values start at 0
+                            // zmax will be auto-calculated by Plotly from data
+                        });
+                        console.log(`✅ Dose overlay added for slice ${currentSlice}`);
+                    } else {
+                        console.log('ℹ️ Dose toggle is ON but dose slice contains no data (all zeros)');
+                    }
+                } else {
+                    console.log('⚠️ Dose slice has invalid structure');
+                }
+            } else {
+                if (showDose && !doseSlice) {
+                    console.log('ℹ️ Dose toggle is ON but no dose data available');
+                }
+            }
+
+            console.log(`📈 Rendering Plotly with ${traces.length} trace(s)...`);
+            try {
+                Plotly.newPlot('ct-viewer', traces, layout, {responsive: true});
+                console.log('✅ Plotly render completed successfully');
+            } catch (error) {
+                console.error('❌ Plotly render error:', error);
+                // NEVER show placeholder if we've already loaded a CT scan
+                if (!hasLoadedCTScan) {
+                    renderPlaceholder();
+                } else {
+                    console.warn('⚠️ Plotly render error but keeping current view - CT scan already loaded');
+                }
+            }
+        }
+
+        function renderPlaceholder() {
+            const layout = {
+                title: 'CT Viewer - Load CT scan to view',
+                xaxis: { showgrid: false },
+                yaxis: { showgrid: false },
+                plot_bgcolor: '#1a1e24',
+                paper_bgcolor: '#1a1e24',
+                font: { color: 'white' }
+            };
+            Plotly.newPlot('ct-viewer', [{
+                x: [0, 1, 2],
+                y: [0, 1, 2],
+                type: 'scatter',
+                mode: 'markers',
+                marker: { size: 10 }
+            }], layout);
+        }
+
+        // Control functions
+        function updateSlice(value) {
+            currentSlice = parseInt(value);
+            document.getElementById('slice-number').textContent = currentSlice;
+            
+            // Load new slice data if CT scan is loaded
+            if (currentCTData && currentCTData.id) {
+                loadCTImage(currentCTData);
+            }
+        }
+
+        function updateWindowLevel() {
+            const parsedWindow = parseInt(document.getElementById('window-value').value);
+            const parsedLevel = parseInt(document.getElementById('level-value').value);
+            if (!isNaN(parsedWindow) && parsedWindow > 0) {
+                windowValue = parsedWindow;
+            }
+            if (!isNaN(parsedLevel)) {
+                levelValue = parsedLevel;
+            }
+            if (lastLoadedSlicePayload && lastLoadedSlicePayload.ct_slice) {
+                renderCTView(
+                    lastLoadedSlicePayload.ct_slice, 
+                    lastLoadedSlicePayload.mask_slice || null, 
+                    lastLoadedSlicePayload.dose_slice || null
+                );
+            }
+        }
+
+        function resetWindowLevel() {
+            document.getElementById('window-value').value = 400;
+            document.getElementById('level-value').value = 50;
+            updateWindowLevel();
+        }
+
+        function toggleROI() {
+            showROI = !showROI;
+            const btn = document.getElementById('toggle-roi');
+            btn.classList.toggle('active');
+            if (currentCTData) {
+                // Reload view with updated overlay
+                loadCTImage(currentCTData);
+            }
+        }
+
+        function toggleDose() {
+            showDose = !showDose;
+            const btn = document.getElementById('toggle-dose');
+            btn.classList.toggle('active');
+            if (currentCTData) {
+                // Reload view with updated dose overlay
+                loadCTImage(currentCTData);
+            }
+        }
+
+        function setView(view) {
+            if (view === currentView) {
+                return;  // Already on this view
+            }
+            
+            currentView = view;
+            
+            // Update button states
+            document.querySelectorAll('.toggle-btn').forEach(btn => {
+                const btnText = btn.textContent.trim();
+                if (btnText.toLowerCase() === view) {
+                    btn.classList.add('active');
+                } else if (['Axial', 'Coronal', 'Sagittal'].includes(btnText)) {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            // Reset slice to middle when changing views
+            if (currentCTData && currentCTData.id) {
+                // Reset slice to 0, will be adjusted when data loads
+                currentSlice = 0;
+                document.getElementById('slice-slider').value = 0;
+                document.getElementById('slice-number').textContent = 0;
+                
+                // Reload current slice with new view
+                loadCTImage(currentCTData);
+            }
+            
+            console.log(`🔄 Switched to ${view} view`);
+        }
+
+        function createPlan() {
+            if (ctId) {
+                window.location.href = `plan-create.html?ct_id=${ctId}&patient_id=${patientId || ''}`;
+            } else {
+                alert('CT scan ID required');
+            }
+        }
+
+        // Initialize - simple and straightforward
+        window.onload = () => {
+            console.log('🚀 Page loaded, checking ct-viewer element...');
+            const viewerDiv = document.getElementById('ct-viewer');
+            if (viewerDiv) {
+                console.log('✅ ct-viewer element found:', viewerDiv);
+                console.log('📏 Element dimensions:', {
+                    width: viewerDiv.offsetWidth,
+                    height: viewerDiv.offsetHeight,
+                    clientWidth: viewerDiv.clientWidth,
+                    clientHeight: viewerDiv.clientHeight
+                });
+            } else {
+                console.error('❌ ct-viewer element NOT FOUND!');
+            }
+            console.log('🔄 Calling loadCTScan()...');
+            loadCTScan();
+        };
+
+        // Function to show which slices have ROI data
+        function showSlicesWithROI() {
+            if (slicesWithROI.length === 0) {
+                console.log('ℹ️ No slices with ROI data found yet. Navigate through slices to detect ROI data.');
+                alert('No slices with ROI data found yet.\n\nNavigate through slices using the slider to detect which slices have ROI data.');
+            } else {
+                const message = `Slices with ROI data (${slicesWithROI.length} total):\n\n${slicesWithROI.join(', ')}\n\nRange: ${slicesWithROI[0]} to ${slicesWithROI[slicesWithROI.length - 1]}`;
+                console.log('📋 Slices with ROI:', slicesWithROI);
+                alert(message);
+            }
+        }
+        
+        // Export functions for onclick handlers
+        window.updateSlice = updateSlice;
+        window.updateWindowLevel = updateWindowLevel;
+        window.resetWindowLevel = resetWindowLevel;
+        window.toggleROI = toggleROI;
+        window.toggleDose = toggleDose;
+        window.setView = setView;
+        window.createPlan = createPlan;
+        window.showSlicesWithROI = showSlicesWithROI;
+    </script>
+</body>
+</html>
+

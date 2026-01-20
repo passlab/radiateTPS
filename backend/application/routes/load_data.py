@@ -1,11 +1,20 @@
 from flask import Blueprint, request, jsonify
 import os
-from opentps.core.io.dataLoader import readData
+
+# OpenTPS import (optional)
+try:
+    from opentps.core.io.dataLoader import readData
+    OPENTPS_AVAILABLE = True
+except ImportError:
+    OPENTPS_AVAILABLE = False
+    readData = None
 
 load_data = Blueprint("load_data", __name__)
 
 @load_data.route("/<dataset_name>", methods=["GET"])
 def load_specific_dataset(dataset_name):  # ✅ Renamed
+    if not OPENTPS_AVAILABLE:
+        return jsonify({"error": "OpenTPS not available. Please install OpenTPS to use this feature."}), 503
     try:
         dataset_dir = os.path.join(os.getcwd(), "datasets", dataset_name)
         data = readData(dataset_dir)
@@ -36,6 +45,8 @@ def list_datasets():
 
 @load_data.route("/datasets/<dataset_name>/rois", methods=["GET"])
 def get_rois_for_dataset(dataset_name):
+    if not OPENTPS_AVAILABLE:
+        return jsonify({"error": "OpenTPS not available. Please install OpenTPS to use this feature."}), 503
     dataset_path = os.path.join(os.getcwd(), "datasets", dataset_name)
     try:
         data = readData(dataset_path)

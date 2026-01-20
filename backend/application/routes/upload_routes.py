@@ -1,11 +1,20 @@
 from flask import Blueprint, request, jsonify
 import os
-from opentps.core.io.dataLoader import readData
+
+# OpenTPS import (optional)
+try:
+    from opentps.core.io.dataLoader import readData
+    OPENTPS_AVAILABLE = True
+except ImportError:
+    OPENTPS_AVAILABLE = False
+    readData = None
 
 upload_routes = Blueprint("upload_routes", __name__)
 
 @upload_routes.route("/upload_dicom", methods=["POST"])
 def upload_dicom():
+    if not OPENTPS_AVAILABLE:
+        return jsonify({"error": "OpenTPS not available. Please install OpenTPS to use this feature."}), 503
     # Save uploaded files
     folder = "uploads/dicom_temp"
     os.makedirs(folder, exist_ok=True)
@@ -25,6 +34,8 @@ def upload_dicom():
     
 @upload_routes.route("/test_rois", methods=["GET"])
 def test_rois():
+    if not OPENTPS_AVAILABLE:
+        return jsonify({"error": "OpenTPS not available. Please install OpenTPS to use this feature."}), 503
     ctImagePath = os.path.join(os.getcwd(), "datasets", "data")
     data = readData(ctImagePath)
     rt_struct = data[0]

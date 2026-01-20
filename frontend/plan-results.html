@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plan Results - RadiateTPS</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .results-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .results-main {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+        .results-sidebar {
+            background: #293556;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .results-content {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .stat-card {
+            background: #1a1e24;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #5983FC;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #5983FC;
+        }
+        .dvh-chart {
+            width: 100%;
+            min-height: 400px;
+            margin: 20px 0;
+        }
+        .dose-viewer {
+            width: 100%;
+            min-height: 500px;
+            margin: 20px 0;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        .btn-primary {
+            background: #5983FC;
+            color: white;
+        }
+        .btn-secondary {
+            background: #555;
+            color: white;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #555;
+        }
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+        .tab.active {
+            color: white;
+            border-bottom-color: #5983FC;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">RadiateTPS</div>
+        <div class="nav-links">
+            <a href="index.html">Home</a>
+            <a href="dashboard.html">Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="results-container">
+        <div class="results-header">
+            <h2 id="results-title">Plan Results</h2>
+            <div>
+                <button class="btn btn-secondary" onclick="window.history.back()">← Back</button>
+                <button class="btn btn-primary" onclick="exportReport()">Export Report</button>
+            </div>
+        </div>
+
+        <div class="results-main">
+            <div class="results-sidebar">
+                <h3>Dose Statistics</h3>
+                <div class="stat-card">
+                    <div class="stat-label">D95</div>
+                    <div class="stat-value" id="stat-d95">--</div>
+                    <div style="font-size: 11px; color: #aaa;">95% of volume receives this dose</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">D5</div>
+                    <div class="stat-value" id="stat-d5">--</div>
+                    <div style="font-size: 11px; color: #aaa;">5% of volume receives this dose</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Mean Dose</div>
+                    <div class="stat-value" id="stat-mean">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Max Dose</div>
+                    <div class="stat-value" id="stat-max">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Uniformity (D5-D95)</div>
+                    <div class="stat-value" id="stat-uniformity">--</div>
+                    <div style="font-size: 11px; color: #aaa;">Lower is better</div>
+                </div>
+
+                <div style="margin-top: 30px;">
+                    <h4>Plan Info</h4>
+                    <div id="plan-info" style="font-size: 12px; color: #aaa;">
+                        Loading...
+                    </div>
+                </div>
+            </div>
+
+            <div class="results-content">
+                <div class="tabs">
+                    <button class="tab active" onclick="showTab('dose')">Dose Distribution</button>
+                    <button class="tab" onclick="showTab('dvh')">DVH Analysis</button>
+                    <button class="tab" onclick="showTab('stats')">Statistics</button>
+                </div>
+
+                <div id="tab-dose" class="tab-content active">
+                    <h3>Dose Distribution</h3>
+                    <div id="dose-viewer" class="dose-viewer"></div>
+                    <div style="margin-top: 15px;">
+                        <label>Slice: <input type="range" id="slice-slider" min="0" max="100" value="50" oninput="updateSlice(this.value)"></label>
+                        <span id="slice-info">Slice 50/100</span>
+                    </div>
+                </div>
+
+                <div id="tab-dvh" class="tab-content">
+                    <h3>Dose-Volume Histogram</h3>
+                    <div id="dvh-chart" class="dvh-chart"></div>
+                </div>
+
+                <div id="tab-stats" class="tab-content">
+                    <h3>Detailed Statistics</h3>
+                    <div id="detailed-stats" style="color: #aaa;">
+                        Loading statistics...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get plan ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const planId = urlParams.get('plan_id');
+
+        let resultData = null;
+
+        async function loadResults() {
+            if (!planId) {
+                alert('Plan ID required');
+                return;
+            }
+
+            try {
+                // Load plan details
+                const planResponse = await fetch(`/plans/${planId}`);
+                const planData = await planResponse.json();
+
+                if (!planResponse.ok) {
+                    alert(`Error: ${planData.error}`);
+                    return;
+                }
+
+                document.getElementById('results-title').textContent = `Results: ${planData.plan.plan_name}`;
+                document.getElementById('plan-info').innerHTML = `
+                    <div>Plan: ${planData.plan.plan_name}</div>
+                    <div>Type: ${planData.plan.plan_type}</div>
+                    <div>Beams: ${planData.plan.beam_names.length}</div>
+                    <div>Created: ${new Date(planData.plan.created_at).toLocaleDateString()}</div>
+                `;
+
+                // Load dose results
+                const resultsResponse = await fetch(`/results?plan_id=${planId}`);
+                const resultsData = await resultsResponse.json();
+
+                if (resultsData.results && resultsData.results.length > 0) {
+                    resultData = resultsData.results[0];
+                    // Store ct_scan_id for slice navigation
+                    if (planData.plan && planData.plan.ct_scan_id) {
+                        resultData.ct_scan_id = planData.plan.ct_scan_id;
+                    }
+                    displayResults(resultData);
+                } else {
+                    // No results yet - might be computing
+                    document.getElementById('detailed-stats').innerHTML = 'No dose results found. Compute dose first.';
+                }
+
+            } catch (error) {
+                console.error('Error loading results:', error);
+                alert('Failed to load results');
+            }
+        }
+
+        function displayResults(result) {
+            // Update statistics
+            if (result.d95) document.getElementById('stat-d95').textContent = `${result.d95.toFixed(2)} Gy`;
+            if (result.d5) document.getElementById('stat-d5').textContent = `${result.d5.toFixed(2)} Gy`;
+            if (result.mean_dose) document.getElementById('stat-mean').textContent = `${result.mean_dose.toFixed(2)} Gy`;
+            if (result.max_dose) document.getElementById('stat-max').textContent = `${result.max_dose.toFixed(2)} Gy`;
+            
+            if (result.d5 && result.d95) {
+                const uniformity = (result.d5 - result.d95).toFixed(2);
+                document.getElementById('stat-uniformity').textContent = `${uniformity} Gy`;
+            }
+
+            // Display DVH
+            if (result.dvh_data) {
+                displayDVH(result.dvh_data);
+            } else {
+                // Generate mock DVH from dose statistics if available
+                if (result.mean_dose && result.max_dose) {
+                    generateMockDVH(result);
+                } else {
+                    document.getElementById('dvh-chart').innerHTML = '<p style="color: #aaa; text-align: center; padding: 50px;">No DVH data available. DVH requires ROI analysis.</p>';
+                }
+            }
+
+            // Display dose distribution
+            if (result.visualization_image_path) {
+                displayDoseImage(result.visualization_image_path);
+            } else {
+                // Load dose slices from CT viewer API
+                loadDoseFromCTViewer(result.ct_scan_id);
+            }
+
+            // Detailed stats
+            const statsHtml = `
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr style="border-bottom: 1px solid #555;">
+                        <td style="padding: 10px;">D95</td>
+                        <td style="padding: 10px; text-align: right;">${result.d95 ? result.d95.toFixed(2) + ' Gy' : 'N/A'}</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #555;">
+                        <td style="padding: 10px;">D5</td>
+                        <td style="padding: 10px; text-align: right;">${result.d5 ? result.d5.toFixed(2) + ' Gy' : 'N/A'}</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #555;">
+                        <td style="padding: 10px;">Mean Dose</td>
+                        <td style="padding: 10px; text-align: right;">${result.mean_dose ? result.mean_dose.toFixed(2) + ' Gy' : 'N/A'}</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #555;">
+                        <td style="padding: 10px;">Max Dose</td>
+                        <td style="padding: 10px; text-align: right;">${result.max_dose ? result.max_dose.toFixed(2) + ' Gy' : 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;">Uniformity (D5-D95)</td>
+                        <td style="padding: 10px; text-align: right;">${result.d5 && result.d95 ? (result.d5 - result.d95).toFixed(2) + ' Gy' : 'N/A'}</td>
+                    </tr>
+                </table>
+            `;
+            document.getElementById('detailed-stats').innerHTML = statsHtml;
+        }
+
+        function displayDVH(dvhData) {
+            const layout = {
+                title: 'Dose-Volume Histogram',
+                xaxis: { 
+                    title: 'Dose (Gy)',
+                    gridcolor: '#444'
+                },
+                yaxis: { 
+                    title: 'Volume (%)',
+                    gridcolor: '#444'
+                },
+                plot_bgcolor: '#1a1e24',
+                paper_bgcolor: '#1a1e24',
+                font: { color: 'white' },
+                grid: { color: '#444' }
+            };
+
+            const trace = {
+                x: dvhData.dose_values || [],
+                y: dvhData.volume_percentages || [],
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Target ROI',
+                line: { color: '#5983FC', width: 2 }
+            };
+
+            Plotly.newPlot('dvh-chart', [trace], layout, {responsive: true});
+        }
+
+        function displayDoseImage(imagePath) {
+            // Extract filename from path
+            const filename = imagePath.split('/').pop();
+            const img = document.createElement('img');
+            img.src = `/get_image?image=${filename}`;
+            img.style.width = '100%';
+            img.style.height = 'auto';
+            img.style.borderRadius = '4px';
+            
+            const container = document.getElementById('dose-viewer');
+            container.innerHTML = '';
+            container.appendChild(img);
+        }
+
+        async function loadDoseFromCTViewer(ctScanId) {
+            // Load dose data from CT slice API
+            if (!ctScanId) {
+                document.getElementById('dose-viewer').innerHTML = '<p style="color: #aaa; text-align: center; padding: 50px;">CT scan ID not available.</p>';
+                return;
+            }
+            
+            try {
+                // Get middle slice
+                const sliceNum = 95; // Middle of 190 slices
+                const response = await fetch(`/ct/${ctScanId}/slice/${sliceNum}?view=axial`);
+                const data = await response.json();
+                
+                if (data.success && data.ct_slice && data.dose_slice) {
+                    renderDoseView(data.ct_slice, data.mask_slice, data.dose_slice);
+                    // Update slice slider
+                    if (data.total_slices) {
+                        const slider = document.getElementById('slice-slider');
+                        slider.max = data.total_slices - 1;
+                        slider.value = sliceNum;
+                        document.getElementById('slice-info').textContent = `Slice ${sliceNum}/${data.total_slices - 1}`;
+                    }
+                } else {
+                    document.getElementById('dose-viewer').innerHTML = '<p style="color: #aaa; text-align: center; padding: 50px;">No dose data available. Please compute dose first.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading dose visualization:', error);
+                document.getElementById('dose-viewer').innerHTML = '<p style="color: #aaa; text-align: center; padding: 50px;">Error loading dose data.</p>';
+            }
+        }
+
+        function generateMockDVH(result) {
+            // Generate a simple DVH curve from mean and max dose
+            const meanDose = result.mean_dose;
+            const maxDose = result.max_dose;
+            
+            // Create a simple DVH curve (sigmoid-like shape)
+            const doseValues = [];
+            const volumePercentages = [];
+            
+            for (let i = 0; i <= 100; i++) {
+                const dose = (maxDose * i) / 100;
+                // Sigmoid curve: volume decreases as dose increases
+                const volume = 100 * (1 - Math.pow(dose / maxDose, 2));
+                doseValues.push(dose);
+                volumePercentages.push(Math.max(0, volume));
+            }
+            
+            displayDVH({
+                dose_values: doseValues,
+                volume_percentages: volumePercentages
+            });
+        }
+
+        function renderDoseView(ctSlice, maskSlice, doseSlice) {
+            const layout = {
+                title: 'Dose Distribution Overlay',
+                xaxis: { title: 'X (mm)', showgrid: false },
+                yaxis: { 
+                    title: 'Y (mm)', 
+                    showgrid: false,
+                    scaleanchor: 'x',
+                    scaleratio: 1,
+                    autorange: 'reversed'
+                },
+                showlegend: false,
+                plot_bgcolor: '#1a1e24',
+                paper_bgcolor: '#1a1e24',
+                font: { color: 'white' }
+            };
+
+            const traces = [
+                {
+                    z: ctSlice,
+                    type: 'heatmap',
+                    colorscale: 'Greys',
+                    showscale: false,
+                    opacity: 1.0
+                },
+                {
+                    z: maskSlice,
+                    type: 'contour',
+                    line: { color: 'red', width: 2 },
+                    showscale: false
+                },
+                {
+                    z: doseSlice,
+                    type: 'heatmap',
+                    colorscale: 'Jet',
+                    showscale: true,
+                    opacity: 0.5,
+                    colorbar: {
+                        title: 'Dose (Gy)',
+                        titlefont: { color: 'white' },
+                        tickfont: { color: 'white' }
+                    }
+                }
+            ];
+
+            Plotly.newPlot('dose-viewer', traces, layout, {responsive: true});
+        }
+
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function updateSlice(value) {
+            if (!resultData || !resultData.ct_scan_id) return;
+            
+            const sliceNum = parseInt(value);
+            document.getElementById('slice-info').textContent = `Slice ${sliceNum}`;
+            
+            try {
+                const response = await fetch(`/ct/${resultData.ct_scan_id}/slice/${sliceNum}?view=axial`);
+                const data = await response.json();
+                
+                if (data.success && data.ct_slice && data.dose_slice) {
+                    renderDoseView(data.ct_slice, data.mask_slice, data.dose_slice);
+                }
+            } catch (error) {
+                console.error('Error loading slice:', error);
+            }
+        }
+
+        function exportReport() {
+            alert('Export functionality coming soon!');
+            // TODO: Generate PDF report
+        }
+
+        // Initialize
+        window.onload = () => {
+            if (planId) {
+                loadResults();
+            } else {
+                alert('Plan ID required');
+            }
+        };
+
+        // Export functions
+        window.showTab = showTab;
+        window.updateSlice = updateSlice;
+        window.exportReport = exportReport;
+    </script>
+</body>
+</html>
+

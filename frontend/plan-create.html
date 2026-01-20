@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Treatment Plan - RadiateTPS</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .plan-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .plan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .plan-main {
+            display: flex;
+            gap: 20px;
+        }
+        .plan-form {
+            width: 400px;
+            background: #293556;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .plan-preview {
+            flex: 1;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            background: #1a1e24;
+            color: white;
+            font-size: 14px;
+        }
+        .beams-list {
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .beam-item {
+            background: #1a1e24;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #555;
+        }
+        .beam-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .beam-params {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 12px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        .btn-primary {
+            background: #5983FC;
+            color: white;
+        }
+        .btn-secondary {
+            background: #555;
+            color: white;
+        }
+        .btn-danger {
+            background: #cc0000;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.8;
+        }
+        .btn-block {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .preview-image {
+            width: 100%;
+            min-height: 500px;
+            background: #1a1e24;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">RadiateTPS</div>
+        <div class="nav-links">
+            <a href="index.html">Home</a>
+            <a href="dashboard.html">Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="plan-container">
+        <div class="plan-header">
+            <h2>Create Treatment Plan</h2>
+            <button class="btn btn-secondary" onclick="window.history.back()">← Back</button>
+        </div>
+
+        <div class="plan-main">
+            <div class="plan-form">
+                <form id="plan-form">
+                    <div class="form-group">
+                        <label>Plan Name *</label>
+                        <input type="text" id="plan-name" value="New Plan" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Patient ID *</label>
+                        <input type="text" id="patient-id" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>CT Scan ID *</label>
+                        <input type="number" id="ct-scan-id" required>
+                        <small style="color: #aaa; font-size: 12px;">From CT Viewer</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Plan Type *</label>
+                        <select id="plan-type" required>
+                            <option value="Proton">Proton</option>
+                            <option value="Photon">Photon</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Target ROI ID</label>
+                        <input type="number" id="target-roi-id" placeholder="Optional">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Beams</label>
+                        <button type="button" class="btn btn-primary btn-block" onclick="addBeam()">+ Add Beam</button>
+                        <div id="beams-list" class="beams-list"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Spot Spacing (mm)</label>
+                        <input type="number" id="spot-spacing" value="5.0" step="0.1">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Layer Spacing (mm)</label>
+                        <input type="number" id="layer-spacing" value="5.0" step="0.1">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Target Margin (mm)</label>
+                        <input type="number" id="target-margin" value="5.0" step="0.1">
+                    </div>
+
+                    <div style="margin-top: 30px;">
+                        <button type="button" class="btn btn-primary btn-block" onclick="savePlan()">Save Plan</button>
+                        <button type="button" class="btn btn-primary btn-block" onclick="saveAndCompute()">Save & Compute Dose</button>
+                        <button type="button" class="btn btn-secondary btn-block" onclick="window.history.back()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="plan-preview">
+                <h3>Plan Preview</h3>
+                <div id="plan-preview" class="preview-image"></div>
+                <div id="plan-summary" style="margin-top: 20px; color: #aaa; font-size: 14px;">
+                    Configure plan parameters to see preview
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get parameters from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const ctId = urlParams.get('ct_id');
+        const patientId = urlParams.get('patient_id');
+
+        if (ctId) {
+            document.getElementById('ct-scan-id').value = ctId;
+        }
+        if (patientId) {
+            document.getElementById('patient-id').value = patientId;
+        }
+
+        let beams = [
+            { name: 'Beam1', gantry: 0, couch: 0 }
+        ];
+
+        function addBeam() {
+            const beamNum = beams.length + 1;
+            beams.push({
+                name: `Beam${beamNum}`,
+                gantry: 0,
+                couch: 0
+            });
+            renderBeams();
+        }
+
+        function removeBeam(index) {
+            beams.splice(index, 1);
+            renderBeams();
+        }
+
+        function updateBeam(index, field, value) {
+            beams[index][field] = parseFloat(value) || 0;
+            renderBeams();
+            updatePreview();
+        }
+
+        function renderBeams() {
+            const container = document.getElementById('beams-list');
+            container.innerHTML = '';
+
+            beams.forEach((beam, index) => {
+                const beamDiv = document.createElement('div');
+                beamDiv.className = 'beam-item';
+                beamDiv.innerHTML = `
+                    <div class="beam-item-header">
+                        <strong>${beam.name}</strong>
+                        <button type="button" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="removeBeam(${index})">Remove</button>
+                    </div>
+                    <div class="beam-params">
+                        <div>
+                            <label style="font-size: 11px;">Gantry Angle:</label>
+                            <input type="number" value="${beam.gantry}" step="1" onchange="updateBeam(${index}, 'gantry', this.value)" style="width: 100%;">
+                        </div>
+                        <div>
+                            <label style="font-size: 11px;">Couch Angle:</label>
+                            <input type="number" value="${beam.couch}" step="1" onchange="updateBeam(${index}, 'couch', this.value)" style="width: 100%;">
+                        </div>
+                    </div>
+                `;
+                container.appendChild(beamDiv);
+            });
+        }
+
+        function updatePreview() {
+            // Simple preview showing beam angles
+            const summary = `
+                <strong>Plan Summary:</strong><br>
+                Beams: ${beams.length}<br>
+                ${beams.map(b => `${b.name}: Gantry ${b.gantry}°, Couch ${b.couch}°`).join('<br>')}
+            `;
+            document.getElementById('plan-summary').innerHTML = summary;
+
+            // TODO: Show visual beam placement on CT
+            // For MVP: Show text summary
+        }
+
+        async function savePlan() {
+            const planData = {
+                patient_id: document.getElementById('patient-id').value,
+                ct_scan_id: parseInt(document.getElementById('ct-scan-id').value),
+                plan_name: document.getElementById('plan-name').value,
+                plan_type: document.getElementById('plan-type').value,
+                target_roi_id: document.getElementById('target-roi-id').value ? parseInt(document.getElementById('target-roi-id').value) : null,
+                beam_names: beams.map(b => b.name),
+                gantry_angles: beams.map(b => b.gantry),
+                couch_angles: beams.map(b => b.couch),
+                spot_spacing: parseFloat(document.getElementById('spot-spacing').value),
+                layer_spacing: parseFloat(document.getElementById('layer-spacing').value),
+                target_margin: parseFloat(document.getElementById('target-margin').value)
+            };
+
+            try {
+                const response = await fetch('/plans', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(planData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Plan saved successfully!');
+                    window.location.href = `plan-results.html?plan_id=${data.plan.id}`;
+                } else {
+                    alert(`Error: ${data.error || 'Failed to save plan'}`);
+                }
+            } catch (error) {
+                console.error('Error saving plan:', error);
+                alert('Failed to save plan');
+            }
+        }
+
+        async function saveAndCompute() {
+            // First save the plan
+            const planData = {
+                patient_id: document.getElementById('patient-id').value,
+                ct_scan_id: parseInt(document.getElementById('ct-scan-id').value),
+                plan_name: document.getElementById('plan-name').value,
+                plan_type: document.getElementById('plan-type').value,
+                target_roi_id: document.getElementById('target-roi-id').value ? parseInt(document.getElementById('target-roi-id').value) : null,
+                beam_names: beams.map(b => b.name),
+                gantry_angles: beams.map(b => b.gantry),
+                couch_angles: beams.map(b => b.couch),
+                spot_spacing: parseFloat(document.getElementById('spot-spacing').value),
+                layer_spacing: parseFloat(document.getElementById('layer-spacing').value),
+                target_margin: parseFloat(document.getElementById('target-margin').value)
+            };
+
+            try {
+                // Save plan
+                const saveResponse = await fetch('/plans', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(planData)
+                });
+
+                const saveData = await saveResponse.json();
+
+                if (!saveResponse.ok) {
+                    alert(`Error: ${saveData.error || 'Failed to save plan'}`);
+                    return;
+                }
+
+                const planId = saveData.plan.id;
+
+                // Compute dose
+                alert('Plan saved! Computing dose... This may take a few minutes.');
+                window.location.href = `plan-compute.html?plan_id=${planId}`;
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to save plan');
+            }
+        }
+
+        // Initialize
+        window.onload = () => {
+            renderBeams();
+            updatePreview();
+        };
+
+        // Export functions
+        window.addBeam = addBeam;
+        window.removeBeam = removeBeam;
+        window.updateBeam = updateBeam;
+        window.savePlan = savePlan;
+        window.saveAndCompute = saveAndCompute;
+    </script>
+</body>
+</html>
+

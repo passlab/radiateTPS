@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computing Dose - RadiateTPS</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <style>
+        .compute-container {
+            max-width: 800px;
+            margin: 100px auto;
+            text-align: center;
+            padding: 40px;
+            background: #293556;
+            border-radius: 8px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #1a1e24;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #5983FC;
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .status-message {
+            margin: 20px 0;
+            font-size: 18px;
+            color: #aaa;
+        }
+        .spinner {
+            border: 4px solid #1a1e24;
+            border-top: 4px solid #5983FC;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">RadiateTPS</div>
+        <div class="nav-links">
+            <a href="index.html">Home</a>
+        </div>
+    </nav>
+
+    <div class="compute-container">
+        <h2>Computing Dose Distribution</h2>
+        <div class="spinner"></div>
+        <div class="status-message" id="status-message">Initializing computation...</div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill">0%</div>
+        </div>
+        <div id="details" style="margin-top: 20px; color: #aaa; font-size: 14px;">
+            This may take several minutes...
+        </div>
+        <button class="btn btn-secondary" onclick="cancelComputation()" style="margin-top: 30px;">Cancel</button>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const planId = urlParams.get('plan_id');
+
+        let computationInterval = null;
+
+        async function startComputation() {
+            if (!planId) {
+                alert('Plan ID required');
+                window.history.back();
+                return;
+            }
+
+            try {
+                // Start dose computation
+                const response = await fetch('/dose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan_id: parseInt(planId) })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(`Error: ${error.error || 'Failed to start computation'}`);
+                    window.history.back();
+                    return;
+                }
+
+                // Poll for results
+                pollForResults();
+
+            } catch (error) {
+                console.error('Error starting computation:', error);
+                alert('Failed to start computation');
+                window.history.back();
+            }
+        }
+
+        async function pollForResults() {
+            let progress = 0;
+            const messages = [
+                'Loading CT scan...',
+                'Processing ROIs...',
+                'Computing dose distribution...',
+                'Generating DVH data...',
+                'Finalizing results...'
+            ];
+
+            computationInterval = setInterval(async () => {
+                progress += 10;
+                if (progress > 90) progress = 90;
+
+                document.getElementById('progress-fill').style.width = progress + '%';
+                document.getElementById('progress-fill').textContent = progress + '%';
+                
+                const messageIndex = Math.floor((progress / 100) * messages.length);
+                document.getElementById('status-message').textContent = messages[messageIndex] || 'Processing...';
+
+                // Check if computation is complete
+                try {
+                    const response = await fetch(`/results?plan_id=${planId}`);
+                    const data = await response.json();
+
+                    if (data.results && data.results.length > 0) {
+                        const result = data.results[0];
+                        if (result.computation_status === 'completed') {
+                            clearInterval(computationInterval);
+                            document.getElementById('progress-fill').style.width = '100%';
+                            document.getElementById('progress-fill').textContent = '100%';
+                            document.getElementById('status-message').textContent = 'Computation complete!';
+                            
+                            setTimeout(() => {
+                                window.location.href = `plan-results.html?plan_id=${planId}`;
+                            }, 1000);
+                            return;
+                        } else if (result.computation_status === 'failed') {
+                            clearInterval(computationInterval);
+                            alert(`Computation failed: ${result.error_message || 'Unknown error'}`);
+                            window.history.back();
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error polling results:', error);
+                }
+            }, 2000); // Poll every 2 seconds
+
+            // Timeout after 10 minutes
+            setTimeout(() => {
+                if (computationInterval) {
+                    clearInterval(computationInterval);
+                    alert('Computation is taking longer than expected. Please check results manually.');
+                    window.location.href = `plan-results.html?plan_id=${planId}`;
+                }
+            }, 600000);
+        }
+
+        function cancelComputation() {
+            if (computationInterval) {
+                clearInterval(computationInterval);
+            }
+            if (confirm('Cancel computation? You can check results later.')) {
+                window.history.back();
+            }
+        }
+
+        // Start computation on load
+        window.onload = () => {
+            startComputation();
+        };
+    </script>
+</body>
+</html>
+

@@ -1,1 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
 radiate-venv/
+env/
+ENV/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Test data and output files
+backend/Output/*.pkl
+backend/Output/*.npy
+backend/Output/*.png
+backend/patientData/*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

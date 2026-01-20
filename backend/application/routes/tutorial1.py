@@ -13,21 +13,35 @@ import math
 import pydicom
 from flask import Blueprint, request, jsonify
 
-# OpenTPS Imports
-sys.path.append(r"C:\opentps\opentps_core")
-from opentps.core.data import Patient
-from opentps.core.data.images import CTImage, ROIMask
-from opentps.core.data.plan import PhotonPlanDesign, ProtonPlanDesign
-from opentps.core.processing.doseCalculation.protons.mcsquareDoseCalculator import MCsquareDoseCalculator
-from opentps.core.processing.doseCalculation.doseCalculationConfig import DoseCalculationConfig
-from opentps.core.io import mcsquareIO
-from opentps.core.io.scannerReader import readScanner
-from opentps.core.processing.imageProcessing.resampler3D import resampleImage3DOnImage3D, resampleImage3D
-from opentps.core.data import DVH
+# OpenTPS Imports (optional)
+OPENTPS_AVAILABLE = False
+try:
+    opentps_paths = [
+        r"C:\opentps\opentps_core",
+        "/opt/opentps/opentps_core",
+        os.path.expanduser("~/opentps/opentps_core"),
+    ]
+    for path in opentps_paths:
+        if os.path.exists(path):
+            sys.path.append(path)
+            break
+    
+    from opentps.core.data import Patient
+    from opentps.core.data.images import CTImage, ROIMask
+    from opentps.core.data.plan import PhotonPlanDesign, ProtonPlanDesign
+    from opentps.core.processing.doseCalculation.protons.mcsquareDoseCalculator import MCsquareDoseCalculator
+    from opentps.core.processing.doseCalculation.doseCalculationConfig import DoseCalculationConfig
+    from opentps.core.io import mcsquareIO
+    from opentps.core.io.scannerReader import readScanner
+    from opentps.core.processing.imageProcessing.resampler3D import resampleImage3DOnImage3D, resampleImage3D
+    from opentps.core.data import DVH
+    OPENTPS_AVAILABLE = True
+except ImportError:
+    # OpenTPS not available - routes will return error messages
+    pass
 
 import matplotlib
 matplotlib.use('Agg')  # Use a non-GUI backend before importing pyplot
-import matplotlib.pyplot as plt
 
 
 # Define Blueprint for reference (not used in main API)
@@ -53,6 +67,7 @@ def compute_dose_example():
     data[:, 50:, :] = huWater
     ct.imageArray = data
 
+# ROI mask means (Region of Interest Mask, embedded in the image) ->  the region of interest is the area that we are interested in, in this case the tumor
     roi = ROIMask()
     roi.patient = patient
     roi.name = 'TV'

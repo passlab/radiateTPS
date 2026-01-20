@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - RadiateTPS</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <style>
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: #293556;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #5983FC;
+            margin: 10px 0;
+        }
+        .stat-label {
+            color: #aaa;
+            font-size: 14px;
+        }
+        .section {
+            background: #293556;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background: #5983FC;
+            color: white;
+        }
+        .list-item {
+            background: #1a1e24;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .list-item:hover {
+            background: #2a2a2a;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">RadiateTPS</div>
+        <div class="nav-links">
+            <a href="index.html">Home</a>
+            <a href="dashboard.html" style="color: #5983FC;">Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Dashboard</h1>
+            <button class="btn btn-primary" onclick="createNewPlan()">+ New Plan</button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Active Plans</div>
+                <div class="stat-value" id="stat-plans">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Patients</div>
+                <div class="stat-value" id="stat-patients">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">CT Scans</div>
+                <div class="stat-value" id="stat-ct">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Completed</div>
+                <div class="stat-value" id="stat-completed">--</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <h2>Recent Plans</h2>
+                <a href="#" style="color: #5983FC;">View All</a>
+            </div>
+            <div id="recent-plans">
+                Loading...
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <h2>Recent Patients</h2>
+                <button class="btn btn-primary" onclick="createPatient()">+ New Patient</button>
+            </div>
+            <div id="recent-patients">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadDashboard() {
+            try {
+                // Load plans
+                const plansResponse = await fetch('/plans');
+                const plansData = await plansResponse.json();
+                
+                if (plansData.plans) {
+                    document.getElementById('stat-plans').textContent = plansData.plans.length;
+                    displayRecentPlans(plansData.plans.slice(0, 5));
+                }
+
+                // Load patients
+                const patientsResponse = await fetch('/patients/load');
+                const patients = await patientsResponse.json();
+                
+                if (Array.isArray(patients)) {
+                    document.getElementById('stat-patients').textContent = patients.length;
+                    displayRecentPatients(patients.slice(0, 5));
+                }
+
+                // Load CT scans
+                const ctResponse = await fetch('/ct');
+                const ctData = await ctResponse.json();
+                
+                if (ctData.ct_scans) {
+                    document.getElementById('stat-ct').textContent = ctData.ct_scans.length;
+                }
+
+                // Load results
+                const resultsResponse = await fetch('/results');
+                const resultsData = await resultsResponse.json();
+                
+                if (resultsData.results) {
+                    const completed = resultsData.results.filter(r => r.computation_status === 'completed').length;
+                    document.getElementById('stat-completed').textContent = completed;
+                }
+
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        function displayRecentPlans(plans) {
+            const container = document.getElementById('recent-plans');
+            
+            if (plans.length === 0) {
+                container.innerHTML = '<div style="color: #aaa;">No plans yet. Create your first plan!</div>';
+                return;
+            }
+
+            container.innerHTML = plans.map(plan => `
+                <div class="list-item" onclick="viewPlan(${plan.id})">
+                    <div>
+                        <strong>${plan.plan_name}</strong>
+                        <div style="font-size: 12px; color: #aaa;">
+                            ${plan.plan_type} • ${plan.beam_names.length} beams • ${new Date(plan.created_at).toLocaleDateString()}
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="event.stopPropagation(); viewResults(${plan.id})">View Results</button>
+                </div>
+            `).join('');
+        }
+
+        function displayRecentPatients(patients) {
+            const container = document.getElementById('recent-patients');
+            
+            if (patients.length === 0) {
+                container.innerHTML = '<div style="color: #aaa;">No patients yet. Create your first patient!</div>';
+                return;
+            }
+
+            container.innerHTML = patients.map(patient => `
+                <div class="list-item" onclick="viewPatient('${patient.id}')">
+                    <div>
+                        <strong>${patient.name}</strong>
+                        <div style="font-size: 12px; color: #aaa;">
+                            ID: ${patient.id} • DOB: ${patient.birthDate || 'N/A'}
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="event.stopPropagation(); viewCT('${patient.id}')">View CT</button>
+                </div>
+            `).join('');
+        }
+
+        function viewPlan(planId) {
+            window.location.href = `plan-results.html?plan_id=${planId}`;
+        }
+
+        function viewResults(planId) {
+            window.location.href = `plan-results.html?plan_id=${planId}`;
+        }
+
+        function viewPatient(patientId) {
+            // For MVP: Just show CT scans
+            window.location.href = `viewer-ct.html?patient_id=${patientId}`;
+        }
+
+        function viewCT(patientId) {
+            window.location.href = `viewer-ct.html?patient_id=${patientId}`;
+        }
+
+        function createNewPlan() {
+            window.location.href = 'plan-create.html';
+        }
+
+        function createPatient() {
+            // Simple prompt for MVP
+            const name = prompt('Patient Name:');
+            const id = prompt('Patient ID:');
+            if (name && id) {
+                fetch('/patients/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        id: id,
+                        birthDate: '',
+                        sex: ''
+                    })
+                }).then(() => {
+                    loadDashboard();
+                });
+            }
+        }
+
+        window.onload = () => {
+            loadDashboard();
+        };
+
+        window.viewPlan = viewPlan;
+        window.viewResults = viewResults;
+        window.viewPatient = viewPatient;
+        window.viewCT = viewCT;
+        window.createNewPlan = createNewPlan;
+        window.createPatient = createPatient;
+    </script>
+</body>
+</html>
+
